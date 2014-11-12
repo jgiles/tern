@@ -94,17 +94,18 @@ exports.runTests = function(filter, caseDir) {
 
     while (m = typedef.exec(text)) (function(m) {
       var args = m[3], kind = m[2], directlyHere = m[1];
+      var commentStart = m.index, queryPos = commentStart;
+      var columnInfo = /\s*@(\d+)$/.exec(args);
+      if (columnInfo) {
+        var line = acorn.getLineInfo(text, commentStart).line;
+        queryPos = {line: line - 1, ch: Number(columnInfo[1]) - 1};
+        args = args.slice(0, columnInfo.index);
+      } else {
+        while (/\s/.test(text.charAt(queryPos - 1))) --queryPos;
+      }
       util.addTest();
       if (kind == "+" || kind == "+?") { // Completion test
-        var columnInfo = /\s*@(\d+)$/.exec(args), pos = m.index;
-        if (columnInfo) {
-          var line = acorn.getLineInfo(text, m.index).line;
-          pos = {line: line - 1, ch: Number(columnInfo[1]) - 1};
-          args = args.slice(0, columnInfo.index);
-        } else {
-          while (/\s/.test(text.charAt(pos - 1))) --pos;
-        }
-        var query = {type: "completions", end: pos, file: fname, guess: kind == "+?"};
+        var query = {type: "completions", end: queryPos, file: fname, guess: kind == "+?"};
         var andOthers = /,\s*\.\.\.$/.test(args);
         if (andOthers) args = args.slice(0, args.lastIndexOf(","));
         var parts = args ? args.split(/\s*,\s*/) : [];
@@ -125,10 +126,10 @@ exports.runTests = function(filter, caseDir) {
       } else {
         var start, end;
         if (directlyHere) {
-          for (end = m.index; end && /[\s:,;]/.test(text.charAt(end - 1)); --end) {}
+          for (end = commentStart; end && /[\s:,;]/.test(text.charAt(end - 1)); --end) {}
           start = null;
         } else {
-          var expr = walk.findNodeBefore(ast, m.index, "Expression");
+          var expr = walk.findNodeBefore(ast, commentStart, "Expression");
           if (!expr) {
             fail(m, "No expresion found");
             return;
